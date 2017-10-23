@@ -23,12 +23,12 @@ Or install it yourself as:
     $ gem install yannitor
 
 ## Usage
-
+```ruby
 class Property
   yannitor_features linear: ['area', 'floor', 'floor_count', 'year', 'room_count', 'sale_price'],
                     one_hot: ['building_type', 'building_equipment']
 end
-
+```
 ## Development
 
 After checking out the repo, run `bin/setup` to install dependencies. Then, run `rake spec` to run the tests. You can also run `bin/console` for an interactive prompt that will allow you to experiment.
