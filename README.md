@@ -24,9 +24,10 @@ Or install it yourself as:
 
 ## Usage
 ```ruby
-class Property
+class Property < ApplicationRecord
   yannitor_features linear: ['area', 'floor', 'floor_count', 'year', 'room_count', 'sale_price'],
                     one_hot: ['building_type', 'building_equipment']
+  ...
 end
 ```
 ## Development
