@@ -35,10 +35,10 @@ module Yannitor
         min = all.minimum(feature)
         max = all.maximum(feature)
         "CAST((#{_table_name}.#{feature}::float - #{min}::float) / (#{max}::float - #{min}::float) AS float) as n#{feature}"
-      end.join(', ')).all.map do |estate|
+      end.join(', ')).all.map do |obj|
 
-        estate.class.features[:linear].map do |feature|
-          estate.send("n#{feature}").to_f
+        obj.class.features[:linear].map do |feature|
+          obj.send("n#{feature}").to_f
         end
       end
     end
