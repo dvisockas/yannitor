@@ -1,59 +1,64 @@
-require 'active_record'
-# require 'active_record/version'
-# require 'active_support/core_ext/module'
+# frozen_string_literal: true
 
-# begin
-#   require 'rails/engine'
-# end
+require 'active_record'
 
 module Yannitor
   module Broom
-    attr_accessor :features
+    attr_accessor :yannitor_features
 
     def yannitor_is_cleaning(feats = {})
-      self.features = feats
+      self.yannitor_features = feats
     end
 
-    def to_one_hot target_column, type = 'text'
-      sorted_value_array = self.pluck("distinct(#{target_column})")
+    def to_one_hot(target_column, type = 'text')
+      sorted_value_array = pluck("distinct(#{target_column})").join("'), ('")
 
-      _table_name   = self.table_name
-      values_select = %Q(SELECT value FROM (values ('#{ sorted_value_array.join("'), ('") }')) s(value))
+      table_name = self.table_name
+      values_select = %(
+        SELECT value FROM (values ('#{sorted_value_array}')) s(value)
+      )
 
-      self.select(%Q(
-        #{_table_name}.id,
-        ARRAY_AGG(CASE WHEN sorted_value_table.value::#{type} = #{_table_name}.#{target_column}::#{type} THEN 1 ELSE 0 END) AS o#{target_column}
-      )).joins(%Q(
+      self.select(%(
+        #{table_name}.id,
+        ARRAY_AGG(CASE
+          WHEN sorted_value_table.value::#{type} = #{table_name}.#{target_column}::#{type}
+          THEN 1
+          ELSE 0
+          END
+        ) AS o#{target_column}
+      )).joins(%(
         LEFT JOIN (#{values_select}) AS sorted_value_table ON 1=1
-      )).group("#{_table_name}.id")
+      )).group("#{table_name}.id")
     end
 
     def vectorize
-      _table_name   = self.table_name
+      select('*, ' + linear_feature_select).build_linear_features
+    end
 
-      select('*, ' + features[:linear].map do |feature|
-        min = all.minimum(feature)
-        max = all.maximum(feature)
-        "CAST((#{_table_name}.#{feature}::float - #{min}::float) / (#{max}::float - #{min}::float) AS float) as n#{feature}"
-      end.join(', ')).all.map do |obj|
-
-        obj.class.features[:linear].map do |feature|
+    def build_linear_features
+      all.map do |obj|
+        obj.class.yannitor_features[:linear].map do |feature|
           obj.send("n#{feature}").to_f
         end
       end
     end
 
-    def nelect(feature)
-      _table_name   = self.table_name
+    def linear_feature_select
+      yannitor_features[:linear].map do |feature|
+        min = all.minimum(feature)
+        max = all.maximum(feature)
+        "CAST((#{table_name}.#{feature}::float - #{min}::float) / (#{max}::float - #{min}::float) AS float) as n#{feature}"
+      end.join(', ')
+    end
 
+    def nelect(feature)
       min = all.minimum(feature)
       max = all.maximum(feature)
-      
-      self.select("*, (#{_table_name}.#{feature}::float - #{min}::float) / (#{max}::float - #{min}::float)::float as n#{feature}")
+
+      select("*, (#{table_name}.#{feature}::float - #{min}::float) / (#{max}::float - #{min}::float)::float as n#{feature}")
     end
 
     def normalize(feature)
-      print "Normalizing #{feature}"
       min = all.minimum(feature)
       max = all.maximum(feature)
       data = all.nelect(feature).map do |e|
@@ -63,14 +68,13 @@ module Yannitor
       [data, min, max]
     end
 
-    def to_file
-      CSV.open("data.csv", "wb", {col_sep: ' '}) do |csv|
+    def to_file(file_name = 'data.csv', separator = ' ')
+      CSV.open(file_name, 'wb', col_sep: separator) do |csv|
         all.vectorize.each { |v| csv << v }
       end
 
       nil
     end
-
   end
 end
 
