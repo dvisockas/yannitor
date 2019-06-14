@@ -6,18 +6,11 @@ module Yannitor
   module Broom
     attr_accessor :yannitor_features
 
-    def yannitor_is_cleaning(feats = {})
-      self.yannitor_features = feats
+    def yannitor_is_cleaning(features = {})
+      self.yannitor_features = features
     end
 
     def to_one_hot(target_column, type = 'text')
-      sorted_value_array = pluck("distinct(#{target_column})").join("'), ('")
-
-      table_name = self.table_name
-      values_select = %(
-        SELECT value FROM (values ('#{sorted_value_array}')) s(value)
-      )
-
       self.select(%(
         #{table_name}.id,
         ARRAY_AGG(CASE
@@ -27,8 +20,13 @@ module Yannitor
           END
         ) AS o#{target_column}
       )).joins(%(
-        LEFT JOIN (#{values_select}) AS sorted_value_table ON 1=1
+        LEFT JOIN (#{values_for_select(target_column)}) AS sorted_value_table ON 1=1
       )).group("#{table_name}.id")
+    end
+
+    def values_for_select(target_column)
+      sorted_values = pluck("distinct(#{target_column})").join("'), ('")
+      "SELECT value FROM (values ('#{sorted_values}')) s(value)"
     end
 
     def vectorize
@@ -45,17 +43,19 @@ module Yannitor
 
     def linear_feature_select
       yannitor_features[:linear].map do |feature|
-        min = all.minimum(feature)
-        max = all.maximum(feature)
-        "CAST((#{table_name}.#{feature}::float - #{min}::float) / (#{max}::float - #{min}::float) AS float) as n#{feature}"
+        "CAST(#{min_max(feature)} AS float) as n#{feature}"
       end.join(', ')
     end
 
-    def nelect(feature)
+    def min_val(feature)
       min = all.minimum(feature)
       max = all.maximum(feature)
 
-      select("*, (#{table_name}.#{feature}::float - #{min}::float) / (#{max}::float - #{min}::float)::float as n#{feature}")
+      "(#{table_name}.#{feature}::float - #{min}::float) / (#{max}::float - #{min}::float)"
+    end
+
+    def nelect(feature)
+      select("*, #{min_max(feature)}::float as n#{feature}")
     end
 
     def normalize(feature)
@@ -72,8 +72,6 @@ module Yannitor
       CSV.open(file_name, 'wb', col_sep: separator) do |csv|
         all.vectorize.each { |v| csv << v }
       end
-
-      nil
     end
   end
 end
